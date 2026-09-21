@@ -51,7 +51,11 @@ notifications, never *forge* build events.
 | .NET 8 ASP.NET Core **Hosting Bundle** | not just the runtime — installs the IIS module |
 | IIS WebSocket Protocol feature | `Install-WindowsFeature -Name Web-WebSockets`. Without it SignalR falls back to long-polling or fails. |
 | Trusted TLS certificate | self-signed will not do — every team machine must trust it |
-| A `D:` drive | the log path is hard-coded in `Program.cs` (`D:\AppData\BuildStatusNotification\Logs`); no `D:` means edit that line before publishing |
+
+The log file path is **configuration, not code** — set via the `Serilog` section
+in `appsettings.json` ([§10](#logging)). `appsettings.Production.example.json`
+defaults to `D:\AppData\BuildStatusNotification\Logs`; if your server has no
+`D:`, edit that one path before deploying, no code change needed.
 
 **On the machine you build from:** .NET 8 SDK, Node.js 18+, PowerShell 5.1+.
 
@@ -131,7 +135,20 @@ protect it with NTFS ACLs. Either way `ASPNETCORE_ENVIRONMENT=Production` must
 be set — it's what selects that file and turns on HTTPS enforcement
 ([§10](#environment-selection)).
 
-**Log directory** (hard-coded path, must exist and be writable):
+**Do this step regardless of which option you picked above.** The log file
+path lives in the `Serilog:WriteTo` array in JSON, not in an env var — an
+array element has no clean `Notifier__`-style env var name, so copy
+`appsettings.Production.example.json` to `appsettings.Production.json` and
+edit its `Serilog:WriteTo` → `File` → `Args:path` even if you're using
+Option A for the secrets. It defaults to
+`D:\AppData\BuildStatusNotification\Logs\notifier-.log` — change the drive
+letter or path there if `D:` doesn't exist on your server.
+
+**Log directory:** the `File` sink creates the directory itself if missing, but
+the app pool identity still needs write access to it. It's kept outside the
+deployment folder on purpose — a future `dotnet publish` into that folder
+should never risk touching the logs — so it isn't covered by whatever
+permissions the deployment folder already has:
 
 ```powershell
 $logDir = "D:\AppData\BuildStatusNotification\Logs"
@@ -142,8 +159,8 @@ $acl.SetAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRul
 Set-Acl $logDir $acl
 ```
 
-Logs roll daily as `notifier-YYYYMMDD.jsonl` (CLEF format), 14 retained — see
-[§9.9](#99-reading-the-logs) to read them.
+Logs roll daily as `notifier-YYYYMMDD.log`, plain text, 14 retained — open
+directly in Notepad or any editor.
 
 **Start and confirm:**
 
@@ -348,7 +365,7 @@ Run in order — each isolates one link in the chain.
 | 5 | Notification arrives | re-run #2 | toast + new row in Recent notifications |
 | 6 | Links work | expand row → Open build | TeamCity tab opens (else: TeamCity Base URL mismatch) |
 | 7 | Real build | trigger one in TeamCity | arrives end to end |
-| 8 | No secret leakage | `Select-String -Path "D:\AppData\BuildStatusNotification\Logs\*.jsonl" -Pattern "Bearer\|access_token\|X-TeamCity-Secret"` | no matches |
+| 8 | No secret leakage | `Select-String -Path "D:\AppData\BuildStatusNotification\Logs\*.log" -Pattern "Bearer\|access_token\|X-TeamCity-Secret"` | no matches |
 
 **Security checklist:** TLS trusted on every machine · only hashes in config,
 raw values only in the password manager · webhook secret ≠ team token · log
@@ -390,18 +407,16 @@ hard cutover. Do it outside a busy build period.
 
 ### 9.9 Reading the logs
 
-`.jsonl` is CLEF — one JSON object per line, `@t` timestamp, `@mt` the
-un-rendered template. Machine-friendly, not eye-friendly:
+Plain text, one line per event — open `notifier-YYYYMMDD.log` directly in
+Notepad, VS Code, or `Get-Content -Tail 50`:
 
-```powershell
-Get-Content D:\AppData\BuildStatusNotification\Logs\notifier-20260921.jsonl -Tail 50 |
-  ForEach-Object { $_ | ConvertFrom-Json } |
-  Format-Table @{n='t';e={([datetime]$_.'@t').ToString('HH:mm:ss')}},
-               @{n='lvl';e={if ($_.'@l') { $_.'@l' } else { 'INF' }}}, '@mt' -AutoSize
+```text
+2026-09-21 10:42:37.123 [INF] Accepted notification: 3E776B38... - finished - SUCCESS - Local - TeamCity Webhook Test - develop
+2026-09-21 10:42:37.140 [INF] Broadcasted notification: 3E776B38...
 ```
 
 Grep for: `Accepted notification`, `Duplicate notification`,
-`Rejected webhook`, `Client connected`.
+`Rejected webhook`, `Client connected`. `[ERR]` / `[WRN]` mark problems.
 
 ---
 
@@ -419,14 +434,40 @@ with `__` for nesting):
 | `BufferTtlMinutes` | `Notifier__BufferTtlMinutes` | `60` | how long an event stays replayable |
 | `ReplayLimit` | `Notifier__ReplayLimit` | `50` | upper bound on one `GetRecent` call |
 
-**Logging:** Serilog reads the **`Serilog`** section, not `Logging` —
-`UseSerilog()` replaces `ILoggerFactory` entirely, so `Logging:LogLevel` is dead
-config. Sinks: console (human-readable) + rolling daily `.jsonl`.
+### Logging
+
+Serilog reads the **`Serilog`** section, not `Logging` — `UseSerilog()`
+replaces `ILoggerFactory` entirely, so a `Logging:LogLevel` section is dead
+config. `Program.cs` has no sink or path logic of its own; everything below
+lives in `appsettings.json` and is what you edit to change it:
+
+| Key | Meaning |
+| --- | --- |
+| `Serilog:MinimumLevel:Default` | overall log level |
+| `Serilog:MinimumLevel:Override:*` | per-namespace overrides (e.g. quiet down `Microsoft`) |
+| `Serilog:WriteTo[0]` (Console) | stdout, same template as the file |
+| `Serilog:WriteTo[1]` (File) `Args:path` | **the log file location** — relative (dev default: `Logs/notifier-.log`) or absolute (prod default: `D:\AppData\BuildStatusNotification\Logs\notifier-.log`) |
+| `Serilog:WriteTo[1]` `Args:retainedFileCountLimit` | how many daily files to keep (default `14`) |
+
+Both sinks use the same plain-text `outputTemplate`, so `{Placeholder}` values
+are always rendered into the line, never left as raw braces.
 
 ```json
-"Serilog": { "MinimumLevel": { "Default": "Information",
-  "Override": { "Microsoft": "Warning", "System": "Warning" } } }
+"Serilog": {
+  "Using": [ "Serilog.Sinks.Console", "Serilog.Sinks.File" ],
+  "MinimumLevel": { "Default": "Information",
+    "Override": { "Microsoft": "Warning", "System": "Warning" } },
+  "WriteTo": [
+    { "Name": "Console", "Args": { "outputTemplate": "..." } },
+    { "Name": "File", "Args": { "path": "Logs/notifier-.log", "outputTemplate": "...",
+        "rollingInterval": "Day", "retainedFileCountLimit": 14 } }
+  ]
+}
 ```
+
+There's no `Notifier__`-style env var for the file path (it's inside an array,
+which env vars address only by a fragile numeric index) — change it by editing
+`appsettings.Production.json` directly, as in [§3](#3-deploy-the-api-to-iis).
 
 ### Environment selection
 

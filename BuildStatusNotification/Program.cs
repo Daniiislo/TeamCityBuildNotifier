@@ -8,20 +8,14 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Serilog;
-using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Serilog
+// Sinks (console + rolling file, including the file path) are defined entirely
+// in the "Serilog" config section - see appsettings.json / appsettings.Production.example.json.
+// Nothing about where logs go is hard-coded here.
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
-    // Console for humans, .jsonl for machines (grep/jq/Seq).
-    .WriteTo.Console()
-    .WriteTo.File(
-        path: @"D:\AppData\BuildStatusNotification\Logs\notifier-.jsonl",
-        formatter: new CompactJsonFormatter(),
-        rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 14)
     .CreateLogger();
 
 builder.Host.UseSerilog();

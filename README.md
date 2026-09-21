@@ -1,104 +1,89 @@
 # TeamCity Build Notifier
 
-Real-time TeamCity build notifications via Chrome/Edge extension.
+Real-time TeamCity build notifications, delivered as desktop toasts and a
+popup in a Chrome/Edge extension.
 
-## Architecture
-
-- **Backend:** .NET 8 Minimal API on IIS, receives TeamCity webhooks, broadcasts via SignalR
-- **Frontend:** Chrome/Edge Manifest V3 extension, displays desktop notifications
-- **Security:** Separate webhook secret and team token, SHA-256 hashes stored
-- **State:** 200-item RAM buffer (60min TTL), 14-day JSONL audit logs
-
-## Repository Structure
-
-```
-BuildStatusNotification/          # .NET 8 Minimal API
-BuildStatusNotification.Tests/    # xUnit tests
-extension/                         # Chrome/Edge extension
-docs/                             # Design specs and integration guides
+```text
+TeamCity build agent  ──POST──►  .NET 8 API (IIS)  ──SignalR──►  Extension
+  X-TeamCity-Secret              validates, dedupes,              desktop toast
+                                  200-event / 60min buffer         popup + status
 ```
 
-## Quick Start
+- **Backend** (`BuildStatusNotification/`) — .NET 8 Minimal API. Receives
+  TeamCity webhooks, validates and de-duplicates them, broadcasts over
+  SignalR. No database — state is an in-memory ring buffer.
+- **Extension** (`extension/`) — Chrome/Edge Manifest V3. Desktop
+  notifications, a popup with recent history and an on-demand "current
+  status" pull, colour-coded by build result.
+- **Security** — two independent secrets (webhook secret, team token), only
+  their SHA-256 hashes ever stored; raw values live in a password manager.
+
+## Repository structure
+
+```text
+BuildStatusNotification/          .NET 8 Minimal API
+BuildStatusNotification.Tests/    xUnit tests
+extension/                        Chrome/Edge extension
+scripts/                          Secret generation, webhook test helper
+docs/                             Design docs, integration contract, setup guide
+```
+
+## Setting this up in production
+
+**[docs/production-setup.md](docs/production-setup.md)** is the full,
+step-by-step guide — prerequisites, generating secrets, IIS deployment,
+TeamCity script changes, building and installing the extension, end-to-end
+verification, secret rotation, and troubleshooting. Start there for a real
+deployment.
+
+## Local development
 
 ### Backend
 
-1. Install .NET 8 SDK and IIS with WebSocket support
-2. Generate secrets:
-```powershell
-function New-Secret {
-  $bytes = [byte[]]::new(32)
-  [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-  $raw  = [Convert]::ToBase64String($bytes)
-  $hash = [BitConverter]::ToString(
-            [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($raw))
-          ).Replace("-", "")
-  [pscustomobject]@{ Raw = $raw; Sha256 = $hash }
-}
-$webhook = New-Secret
-$team    = New-Secret
-```
-
-3. Configure `appsettings.json` with the SHA-256 hashes
-4. Build and run:
 ```bash
 dotnet build
 dotnet test
 dotnet run --project BuildStatusNotification
 ```
 
+Runs on `http://localhost:5104` with `ASPNETCORE_ENVIRONMENT=Development`
+(set in `Properties/launchSettings.json`), which loads
+`appsettings.Development.json` — already populated with working dev secrets.
+
 ### Extension
 
-1. Install dependencies:
 ```bash
 cd extension
 npm install
-```
-
-2. Build:
-```bash
+npm test
 npm run build
 ```
 
-3. Load unpacked extension from `extension/dist/` in Chrome/Edge
-4. Configure in extension options:
-   - Server URL (e.g., `https://buildnotify.example`)
-   - Access Token (the raw team token from step 2)
-   - TeamCity Base URL
-   - Enable notifications
+Then `chrome://extensions` → enable **Developer mode** → **Load unpacked** →
+select `extension/dist`. Open the extension's Options page and point it at
+`http://localhost:5104` with the dev team token from
+`appsettings.Development.json` (hash it yourself, or see
+[docs/production-setup.md §9.3](docs/production-setup.md#93-webhook-returns-401)
+for the one-liner).
 
-### TeamCity Integration
+### Sending a test build event
 
-See `docs/teamcity-integration.md` for PowerShell script modifications.
+No TeamCity instance needed:
 
-## Testing
-
-```bash
-# Backend tests
-dotnet test
-
-# Extension tests
-cd extension
-npm test
+```powershell
+.\scripts\Test-TeamCityWebhook.ps1 both
 ```
+
+Modes: `start`, `finish`, `both`, `duplicate`, `failure`, `cancelled`, `health`.
+The payload contract itself lives in `docs/teamcity-payload.sample.json`.
 
 ## Documentation
 
-- [Design Specification](docs/2026-09-18-teamcity-build-notifier-design.md)
-- [Implementation Plan](docs/2026-09-18-teamcity-build-notifier.md)
-- [TeamCity Integration](docs/teamcity-integration.md)
-- [Extension Installation](docs/extension-install.md)
-
-## Security Notes
-
-- Store only SHA-256 hashes in configuration, never raw secrets
-- Use different secrets for webhook and team token
-- Backend validates all URLs against TeamCityBaseUrl
-- Extension validates build URLs before opening
-- No secrets logged to files or console
-
-## Deployment
-
-See implementation plan Task 9 for IIS deployment steps.
+- **[Production setup guide](docs/production-setup.md)** — everything needed
+  to deploy this from scratch
+- [Design specification](docs/2026-09-18-teamcity-build-notifier-design.md)
+- [Implementation plan](docs/2026-09-18-teamcity-build-notifier.md)
+- [Payload contract fixture](docs/teamcity-payload.sample.json)
 
 ## License
 

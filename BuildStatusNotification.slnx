@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="BuildStatusNotification/BuildStatusNotification.csproj" />
+  <Project Path="BuildStatusNotification.Tests/BuildStatusNotification.Tests.csproj" />
+</Solution>

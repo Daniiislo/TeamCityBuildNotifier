@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>TeamCity Build Notifier</title>
+  <style>
+    :root {
+      --success: #28a745;
+      --failure: #dc3545;
+      --cancelled: #fd7e14;
+      --started: #17a2b8;
+      --unknown: #6c757d;
+      --muted: #6c757d;
+      --line: #e9ecef;
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      width: 400px;
+      padding: 16px;
+      margin: 0;
+      color: #212529;
+    }
+    h1 {
+      font-size: 16px;
+      margin: 0 0 12px 0;
+    }
+    .btn {
+      font: inherit;
+      font-size: 12px;
+      padding: 4px 10px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      background: #fff;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .btn:hover:not(:disabled) { background: #f1f3f5; color: #212529; }
+    .btn:disabled { opacity: .45; cursor: default; }
+    .btn-icon { padding: 4px 8px; line-height: 1; }
+
+    .status {
+      padding: 8px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    .status.connected { background: #d4edda; color: #155724; }
+    .status.connecting { background: #fff3cd; color: #856404; }
+    .status.unauthorized { background: #f8d7da; color: #721c24; }
+    .status.disabled { background: #e2e3e5; color: #383d41; }
+
+    /* --- the two halves of the popup, visibly separate --- */
+    .panel + .panel {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .panel-head h2 {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* --- current status panel --- */
+    .current {
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      overflow: hidden;
+      font-size: 12px;
+    }
+    .current-counts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      padding: 8px;
+      background: #f8f9fa;
+      border-bottom: 1px solid var(--line);
+      font-size: 11px;
+    }
+    .count { white-space: nowrap; }
+    .count b { font-size: 12px; }
+    .count.running b { color: var(--started); }
+    .count.success b { color: var(--success); }
+    .count.failure b { color: var(--failure); }
+    .count.cancelled b { color: var(--cancelled); }
+
+    .current-row {
+      padding: 8px;
+      border-left: 3px solid var(--kind, var(--unknown));
+      border-bottom: 1px solid #f1f3f5;
+    }
+    .current-row:last-of-type { border-bottom: 0; }
+    .current-row.success   { --kind: var(--success); }
+    .current-row.failure   { --kind: var(--failure); }
+    .current-row.cancelled { --kind: var(--cancelled); }
+    .current-row.started   { --kind: var(--started); }
+    .current-row.unknown   { --kind: var(--unknown); }
+    .current-state {
+      font-weight: 600;
+      color: var(--kind);
+      margin-bottom: 2px;
+    }
+    .current-name { word-break: break-word; }
+    .current-when {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+    .current-foot {
+      padding: 6px 8px;
+      background: #f8f9fa;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .current-message { padding: 12px 8px; color: var(--muted); }
+
+    /* --- recent notifications --- */
+    .events {
+      max-height: 340px;
+      overflow-y: auto;
+      /* Reserve the scrollbar track at all times, so rows keep their width
+         whether the list overflows or not - no jump as items are dismissed.
+         The negative margin bleeds that track into body's right padding, so
+         rows stay flush with everything above them. */
+      scrollbar-gutter: stable;
+      margin-right: -16px;
+    }
+    .event {
+      border-left: 3px solid var(--kind, var(--unknown));
+      border-radius: 0 4px 4px 0;
+      background: #f8f9fa;
+      margin-bottom: 8px;
+      font-size: 12px;
+      overflow: hidden;
+    }
+    .event.success   { --kind: var(--success);   background: #f1f9f3; }
+    .event.failure   { --kind: var(--failure);   background: #fdf2f3; }
+    .event.cancelled { --kind: var(--cancelled); background: #fff6ef; }
+    .event.started   { --kind: var(--started);   background: #eff9fb; }
+    .event.unknown   { --kind: var(--unknown);   background: #f8f9fa; }
+
+    .event > summary {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px;
+      cursor: pointer;
+      list-style: none;
+    }
+    .event > summary::-webkit-details-marker { display: none; }
+    .event > summary:hover { background: rgba(0, 0, 0, .03); }
+
+    .summary-body { flex: 1; min-width: 0; }
+    .event-title {
+      font-weight: 600;
+      color: var(--kind);
+      margin-bottom: 2px;
+    }
+    .event-build {
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .event-meta {
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .event-when {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 2px 6px;
+      margin-top: 6px;
+      padding-top: 5px;
+      border-top: 1px dashed rgba(0, 0, 0, .1);
+      font-size: 11px;
+    }
+    .when-clock {
+      font-weight: 600;
+      font-size: 12px;
+      color: #212529;
+      font-variant-numeric: tabular-nums;
+    }
+    .when-relative { color: var(--muted); }
+    .when-duration {
+      margin-left: auto;
+      color: var(--muted);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .caret {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 18px;
+      transition: transform .12s;
+    }
+    .event[open] .caret { transform: rotate(90deg); }
+    .dismiss {
+      border: 0;
+      background: none;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 16px;
+      padding: 0 2px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .dismiss:hover { background: rgba(0, 0, 0, .08); color: #212529; }
+
+    .detail {
+      border-top: 1px solid rgba(0, 0, 0, .07);
+      padding: 8px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 10px;
+      font-size: 11px;
+    }
+    .detail dt { color: var(--muted); }
+    .detail dd { margin: 0; word-break: break-word; }
+    .detail-links {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .link-btn {
+      font: inherit;
+      font-size: 11px;
+      padding: 3px 8px;
+      border: 1px solid var(--kind);
+      border-radius: 3px;
+      background: #fff;
+      color: var(--kind);
+      cursor: pointer;
+    }
+    .link-btn:hover { background: var(--kind); color: #fff; }
+
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 20px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Build Notifications</h1>
+
+  <div id="status" class="status">Loading...</div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Current status</h2>
+      <button id="refresh-status" class="btn btn-icon" type="button" title="Check again" hidden>&#8635;</button>
+      <button id="toggle-status" class="btn" type="button">Show</button>
+    </div>
+    <div id="current" class="current" hidden></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Recent notifications</h2>
+      <button id="clear-all" class="btn" type="button" disabled>Clear all</button>
+    </div>
+    <div id="events" class="events">
+      <div class="empty">No recent notifications</div>
+    </div>
+  </section>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

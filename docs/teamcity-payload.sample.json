@@ -1,0 +1,67 @@
+{
+  "_comment": "Contract fixture, taken from a real build (Geronimo - XYZ - Build #320). Single source of truth shared by the TeamCity PowerShell step, the API validator tests and the extension. Change this file and both sides change with it.",
+
+  "started": {
+    "event": "started",
+    "buildId": "320",
+    "buildTypeId": "Geronimo_XYZ_Build",
+    "projectId": "Geronimo_XYZ",
+    "projectName": "XYZ",
+    "buildName": "Build",
+    "buildTitle": "Geronimo - XYZ - Build",
+    "buildNumber": "320",
+    "branch": "develop",
+    "status": "RUNNING",
+    "statusText": "Build Started",
+    "triggeredBy": "Alex Dang",
+    "startedAt": "2026-05-21T06:27:42Z",
+    "finishedAt": null,
+    "durationSeconds": null,
+    "buildUrl": "https://teamcity.example/viewLog.html?buildId=320",
+    "logUrl": null,
+    "projects": [
+      "Administration",
+      "Provider",
+      "TravelPledge",
+      "WinningBidder",
+      "ImportService",
+      "TravelPledge Marketing",
+      "WinningBidder Marketing",
+      "BestOutings",
+      "Api",
+      "TravelPledgeAuctions"
+    ]
+  },
+
+  "finished": {
+    "event": "finished",
+    "buildId": "320",
+    "buildTypeId": "Geronimo_XYZ_Build",
+    "projectId": "Geronimo_XYZ",
+    "projectName": "XYZ",
+    "buildName": "Build",
+    "buildTitle": "Geronimo - XYZ - Build",
+    "buildNumber": "320",
+    "branch": "develop",
+    "status": "SUCCESS",
+    "statusText": "Build Succeeded",
+    "triggeredBy": "Alex Dang",
+    "startedAt": "2026-05-21T06:27:42Z",
+    "finishedAt": "2026-05-21T06:50:12Z",
+    "durationSeconds": 1350,
+    "buildUrl": "https://teamcity.example/viewLog.html?buildId=320",
+    "logUrl": "https://teamcity.example/viewLog.html?buildId=320&tab=buildLog",
+    "projects": [
+      "Administration",
+      "Provider",
+      "TravelPledge",
+      "WinningBidder",
+      "ImportService",
+      "TravelPledge Marketing",
+      "WinningBidder Marketing",
+      "BestOutings",
+      "Api",
+      "TravelPledgeAuctions"
+    ]
+  }
+}

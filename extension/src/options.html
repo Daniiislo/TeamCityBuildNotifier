@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>TeamCity Build Notifier - Options</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 20px;
+    }
+    .field {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    input[type="checkbox"] {
+      margin-right: 8px;
+    }
+    button {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #1557b0;
+    }
+    .status {
+      margin-top: 12px;
+      padding: 8px;
+      border-radius: 4px;
+      display: none;
+    }
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      display: block;
+    }
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>TeamCity Build Notifier Settings</h1>
+
+  <div class="field">
+    <label for="serverUrl">Server URL</label>
+    <input type="text" id="serverUrl" placeholder="https://buildnotify.example">
+  </div>
+
+  <div class="field">
+    <label for="accessToken">Access Token</label>
+    <input type="password" id="accessToken" placeholder="Enter team token">
+  </div>
+
+  <div class="field">
+    <label for="teamCityBaseUrl">TeamCity Base URL</label>
+    <input type="text" id="teamCityBaseUrl" placeholder="https://teamcity.example">
+  </div>
+
+  <div class="field">
+    <label>
+      <input type="checkbox" id="notifyOnStarted">
+      Notify on build started
+    </label>
+  </div>
+
+  <div class="field">
+    <label>
+      <input type="checkbox" id="enabled">
+      Enable notifications
+    </label>
+  </div>
+
+  <button id="save">Save</button>
+
+  <div id="status" class="status"></div>
+
+  <script src="options.js" type="module"></script>
+</body>
+</html>
